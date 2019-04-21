@@ -11,10 +11,12 @@
 #include <linux/fs.h>
 #include <linux/seq_file.h>
 #include <linux/proc_fs.h>
+#include <linux/kernel_stat.h>
 
 #include "ext4.h"
 #include "ext4_jbd2.h"
 
+extern struct fs_read_stats __percpu *mystats;
 typedef enum {
 	attr_noop,
 	attr_delayed_allocation_blocks,
@@ -26,6 +28,8 @@ typedef enum {
 	attr_feature,
 	attr_pointer_ui,
 	attr_pointer_atomic,
+    attr_miket_fs_read_stats,
+
 } attr_id_t;
 
 typedef enum {
@@ -70,6 +74,54 @@ static ssize_t lifetime_write_kbytes_show(struct ext4_attr *a,
 			(unsigned long long)(sbi->s_kbytes_written +
 			((part_stat_read(sb->s_bdev->bd_part, sectors[1]) -
 			  EXT4_SB(sb)->s_sectors_written_start) >> 1)));
+}
+
+static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
+					 struct ext4_sb_info *sbi, char *buf)
+{
+    struct super_block *sb = sbi->s_buddy_cache->i_sb;
+
+    return snprintf(buf, PAGE_SIZE, 
+        "pread_fdget: %lld\n"
+        "pread_vfs_read: %lld\n"
+        "pread_fdput: %lld\n"
+        "vfs_read_verify: %lld\n"
+        "vfs_read__vfs_read: %lld\n"
+        "vfs_read_post: %lld\n"
+        "vfs_read_count: %lld\n"
+        "sync_read_pre: %lld\n"
+        "sync_read_read_iter: %lld\n"
+        "file_read_resched: %lld\n"
+        "file_read_find_page: %lld\n"
+        "file_read_sync_readahead: %lld\n"
+        "file_read_async_readahead: %lld\n"
+        "file_read_wait_on_page: %lld\n"
+        "file_read_inode: %lld\n"
+        "file_read_copy_page: %lld\n"
+        "file_read_read_page: %lld\n"
+        "file_read_alloc_cold: %lld\n"
+        "file_read_add_page: %lld\n"
+        "file_read_loop: %lld\n",
+        fs_read_stats_read(mystats, time_pread_fdget),
+        fs_read_stats_read(mystats, time_pread_vfs_read),
+        fs_read_stats_read(mystats, time_pread_fdput),
+        fs_read_stats_read(mystats, time_vfs_read_verify),
+        fs_read_stats_read(mystats, time_vfs_read__vfs_read),
+        fs_read_stats_read(mystats, time_vfs_read_post),
+        fs_read_stats_read(mystats, cnt_vfs_read),
+        fs_read_stats_read(mystats, time_sync_read_pre),
+        fs_read_stats_read(mystats, time_sync_read_read_iter),
+        fs_read_stats_read(mystats, time_file_read_resched),
+        fs_read_stats_read(mystats, time_file_read_find_page),
+        fs_read_stats_read(mystats, time_file_read_sync_readahead),
+        fs_read_stats_read(mystats, time_file_read_async_readahead),
+        fs_read_stats_read(mystats, time_file_read_wait_on_page),
+        fs_read_stats_read(mystats, time_file_read_inode),
+        fs_read_stats_read(mystats, time_file_read_copy_page),
+        fs_read_stats_read(mystats, time_file_read_read_page),
+        fs_read_stats_read(mystats, time_file_read_alloc_cold),
+        fs_read_stats_read(mystats, time_file_read_add_page),
+        fs_read_stats_read(mystats, time_file_read_loop));
 }
 
 static ssize_t inode_readahead_blks_store(struct ext4_attr *a,
@@ -166,6 +218,7 @@ EXT4_ATTR_FUNC(delayed_allocation_blocks, 0444);
 EXT4_ATTR_FUNC(session_write_kbytes, 0444);
 EXT4_ATTR_FUNC(lifetime_write_kbytes, 0444);
 EXT4_ATTR_FUNC(reserved_clusters, 0644);
+EXT4_ATTR_FUNC(miket_fs_read_stats, 0444);
 
 EXT4_ATTR_OFFSET(inode_readahead_blks, 0644, inode_readahead,
 		 ext4_sb_info, s_inode_readahead_blks);
@@ -187,6 +240,7 @@ EXT4_RW_ATTR_SBI_UI(msg_ratelimit_burst, s_msg_ratelimit_state.burst);
 EXT4_RO_ATTR_ES_UI(errors_count, s_error_count);
 EXT4_RO_ATTR_ES_UI(first_error_time, s_first_error_time);
 EXT4_RO_ATTR_ES_UI(last_error_time, s_last_error_time);
+EXT4_RW_ATTR_SBI_UI(miket_fs_read_stats_switch, fs_read_stats_switch);
 
 static unsigned int old_bump_val = 128;
 EXT4_ATTR_PTR(max_writeback_mb_bump, 0444, pointer_ui, &old_bump_val);
@@ -216,6 +270,8 @@ static struct attribute *ext4_attrs[] = {
 	ATTR_LIST(errors_count),
 	ATTR_LIST(first_error_time),
 	ATTR_LIST(last_error_time),
+    ATTR_LIST(miket_fs_read_stats_switch),
+    ATTR_LIST(miket_fs_read_stats),
 	NULL,
 };
 
@@ -290,6 +346,8 @@ static ssize_t ext4_attr_show(struct kobject *kobj,
 				atomic_read((atomic_t *) ptr));
 	case attr_feature:
 		return snprintf(buf, PAGE_SIZE, "supported\n");
+    case attr_miket_fs_read_stats:
+        return miket_fs_read_stats_show(a, sbi, buf);
 	}
 
 	return 0;

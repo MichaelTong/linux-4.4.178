@@ -109,7 +109,7 @@ bool early_boot_irqs_disabled __read_mostly;
 
 enum system_states system_state __read_mostly;
 EXPORT_SYMBOL(system_state);
-
+struct fs_read_stats __percpu *mystats;
 /*
  * Boot command-line arguments
  */
@@ -411,6 +411,7 @@ static noinline void __init_refok rest_init(void)
 	schedule_preempt_disabled();
 	/* Call into cpu_idle with preempt disabled */
 	cpu_startup_entry(CPUHP_ONLINE);
+    init_fs_read_stats(&mystats);
 }
 
 /* Check for early params. */

@@ -223,6 +223,8 @@ extern int _cond_resched(void);
 	__builtin_types_compatible_p(typeof(x), unsigned type),		\
 	({ signed type __x = (x); __x < 0 ? -__x : __x; }), other)
 
+extern u64 debuginfo;
+
 /**
  * reciprocal_scale - "scale" a value into range [0, ep_ro)
  * @val: value
@@ -832,4 +834,13 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
 	 /* OTHER_WRITABLE?  Generally considered a bad idea. */		\
 	 BUILD_BUG_ON_ZERO((perms) & 2) +					\
 	 (perms))
+
+#define PRINTK_MIKET(bit, fmt, ...) \
+	do { \
+		if(debuginfo & 1 << bit) \
+			printk(KERN_DEBUG "MikeT: %s %s %d, " fmt "\n", __FILE__, __func__, __LINE__, \
+				__VA_ARGS__); \
+	} while(0)
+
 #endif
+

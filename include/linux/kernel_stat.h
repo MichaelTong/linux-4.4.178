@@ -95,4 +95,69 @@ extern void account_process_tick(struct task_struct *, int user);
 extern void account_steal_ticks(unsigned long ticks);
 extern void account_idle_ticks(unsigned long ticks);
 
+struct fs_read_stats {
+    s64 time_pread_fdget;
+    s64 time_pread_vfs_read;
+    s64 time_pread_fdput;
+
+    s64 time_vfs_read_verify;
+    s64 time_vfs_read__vfs_read;
+    s64 junk;
+    s64 time_vfs_read_post;
+    s64 cnt_vfs_read;
+
+    s64 time_sync_read_pre;
+    s64 time_sync_read_read_iter;
+    
+    s64 time_file_read_resched;
+    s64 time_file_read_find_page;
+    s64 time_file_read_sync_readahead;
+    s64 time_file_read_async_readahead;
+    s64 time_file_read_wait_on_page;
+    s64 time_file_read_inode;
+    s64 time_file_read_copy_page;
+    s64 time_file_read_read_page;
+    s64 time_file_read_alloc_cold;
+    s64 time_file_read_add_page;
+    s64 time_file_read_loop;
+};
+
+#ifdef CONFIG_SMP
+#define fs_read_stats_lock()    ({ rcu_read_lock(); get_cpu(); })
+
+#define fs_read_stats_unlock()  do {put_cpu(); rcu_read_unlock(); } while (0)
+
+extern inline int init_fs_read_stats(struct fs_read_stats **stats);
+
+#define __fs_read_stats_add(cpu, cpu_stat, field, addnd) \
+    (per_cpu_ptr(cpu_stat, (cpu))->field += (addnd))
+
+extern inline void fs_read_stats_set_all(struct fs_read_stats *my_stats, 
+                                        int value);
+
+#define fs_read_stats_read(stats, field)            \
+({                                                  \
+    typeof(stats->field) res = 0;                   \
+    int _cpu;                                       \
+    for_each_possible_cpu(_cpu)                     \
+        res += per_cpu_ptr(stats, _cpu)->field;     \
+    res;                                            \
+})
+
+
+#define my_stats_add_value(cpu_stat, field, value)          \
+    do {                                                    \
+        if (fs_read_stats_switch) {                         \
+            int cpu = fs_read_stats_lock();                 \
+            __fs_read_stats_add(cpu_stat, field, value);    \
+            fs_read_stats_unlock();                         \
+        }                                                   \
+    } while(0)
+
+
+extern struct fs_read_stats __percpu *mystats;
+extern int fs_read_stats_switch;
+extern u64 debuginfo;
+#endif
+
 #endif /* _LINUX_KERNEL_STAT_H */

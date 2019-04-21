@@ -6,6 +6,7 @@
 
 #include <linux/slab.h> 
 #include <linux/stat.h>
+#include <linux/kernel_stat.h>
 #include <linux/fcntl.h>
 #include <linux/file.h>
 #include <linux/uio.h>
@@ -20,6 +21,13 @@
 
 #include <asm/uaccess.h>
 #include <asm/unistd.h>
+#include <linux/ktime.h>
+
+#include "ext4/ext4.h"
+
+extern int fs_read_stats_switch;
+extern struct fs_read_stats __percpu *mystats;
+
 
 typedef ssize_t (*io_fn_t)(struct file *, char __user *, size_t, loff_t *);
 typedef ssize_t (*iter_fn_t)(struct kiocb *, struct iov_iter *);
@@ -416,12 +424,26 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 	struct kiocb kiocb;
 	struct iov_iter iter;
 	ssize_t ret;
+    ktime_t t1, t2, t3;
 
+    t1 = ktime_get_boottime();
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = *ppos;
 	iov_iter_init(&iter, READ, &iov, 1, len);
+    t2 = ktime_get_boottime();
 
-	ret = filp->f_op->read_iter(&kiocb, &iter);
+    ret = filp->f_op->read_iter(&kiocb, &iter);
+    t3 = ktime_get_boottime();
+
+    if (fs_read_stats_switch && filp->f_op->llseek && 
+        filp->f_op->llseek== ext4_llseek && filp->f_inode &&
+        ((struct ext4_sb_info*)(filp->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+        int cpu = fs_read_stats_lock();
+        __fs_read_stats_add(cpu, mystats, time_sync_read_pre, ktime_to_ns(ktime_sub(t2, t1)));
+        __fs_read_stats_add(cpu, mystats, time_sync_read_read_iter, ktime_to_ns(ktime_sub(t3, t2)));
+        fs_read_stats_unlock();
+    }
+
 	BUG_ON(ret == -EIOCBQUEUED);
 	*ppos = kiocb.ki_pos;
 	return ret;
@@ -442,6 +464,7 @@ EXPORT_SYMBOL(__vfs_read);
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
+    ktime_t t1, t2, t3, t4;
 
 	if (!(file->f_mode & FMODE_READ))
 		return -EBADF;
@@ -450,16 +473,30 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 	if (unlikely(!access_ok(VERIFY_WRITE, buf, count)))
 		return -EFAULT;
 
+    t1 = ktime_get_boottime();
 	ret = rw_verify_area(READ, file, pos, count);
+    t2 = ktime_get_boottime();
 	if (ret >= 0) {
 		count = ret;
 		ret = __vfs_read(file, buf, count, pos);
+        t3 = ktime_get_boottime();
 		if (ret > 0) {
 			fsnotify_access(file);
 			add_rchar(current, ret);
 		}
 		inc_syscr(current);
+        t4 = ktime_get_boottime();
 	}
+    if (fs_read_stats_switch && file->f_op->llseek && 
+        file->f_op->llseek== ext4_llseek && file->f_inode &&
+        ((struct ext4_sb_info*)(file->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+        int cpu = fs_read_stats_lock();
+        __fs_read_stats_add(cpu, mystats, time_vfs_read_verify, ktime_to_ns(ktime_sub(t2, t1)));
+        __fs_read_stats_add(cpu, mystats, time_vfs_read__vfs_read, ktime_to_ns(ktime_sub(t3, t2)));
+        __fs_read_stats_add(cpu, mystats, time_vfs_read_post, ktime_to_ns(ktime_sub(t4, t3)));
+        __fs_read_stats_add(cpu, mystats, cnt_vfs_read, 1);
+        fs_read_stats_unlock();
+    }
 
 	return ret;
 }
@@ -598,17 +635,31 @@ SYSCALL_DEFINE4(pread64, unsigned int, fd, char __user *, buf,
 {
 	struct fd f;
 	ssize_t ret = -EBADF;
+    ktime_t t1, t2, t3, t4;
 
 	if (pos < 0)
 		return -EINVAL;
-
+    t1 = ktime_get_boottime();
 	f = fdget(fd);
+    t2 = ktime_get_boottime();
+
 	if (f.file) {
 		ret = -ESPIPE;
-		if (f.file->f_mode & FMODE_PREAD)
+		if (f.file->f_mode & FMODE_PREAD) 
 			ret = vfs_read(f.file, buf, count, &pos);
+        t3 = ktime_get_boottime();
 		fdput(f);
+        t4 = ktime_get_boottime();
 	}
+    if (fs_read_stats_switch && f.file->f_op->llseek && 
+        f.file->f_op->llseek== ext4_llseek && f.file->f_inode &&
+        ((struct ext4_sb_info*)(f.file->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+        int cpu = fs_read_stats_lock();
+        __fs_read_stats_add(cpu, mystats, time_pread_fdget, ktime_to_ns(ktime_sub(t2, t1)));
+        __fs_read_stats_add(cpu, mystats, time_pread_vfs_read, ktime_to_ns(ktime_sub(t3, t2)));
+        __fs_read_stats_add(cpu, mystats, time_pread_fdput, ktime_to_ns(ktime_sub(t4, t3)));
+        fs_read_stats_unlock();
+    }
 
 	return ret;
 }

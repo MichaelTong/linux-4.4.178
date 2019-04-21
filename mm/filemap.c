@@ -35,6 +35,12 @@
 #include <linux/cleancache.h>
 #include <linux/rmap.h>
 #include "internal.h"
+#include <linux/ktime.h>
+
+#include "../fs/ext4/ext4.h"
+
+extern int fs_read_stats_switch;
+extern struct fs_read_stats __percpu *mystats;
 
 #define CREATE_TRACE_POINTS
 #include <trace/events/filemap.h>
@@ -1546,39 +1552,57 @@ static ssize_t do_generic_file_read(struct file *filp, loff_t *ppos,
 	unsigned long offset;      /* offset into pagecache page */
 	unsigned int prev_offset;
 	int error = 0;
+    ktime_t t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15,
+            t17, t18, t19, t20, t21, t22, t23;
+    s64 t_resched = 0, t_find_page = 0, t_sync_readahead = 0, 
+        t_async_readahead = 0, t_wait_on_page = 0, t_inode = 0, t_copy_page = 0,
+        t_read_page = 0, t_alloc_cold = 0, t_add_page = 0, t_loop = 0;
 
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
 	prev_offset = ra->prev_pos & (PAGE_CACHE_SIZE-1);
 	last_index = (*ppos + iter->count + PAGE_CACHE_SIZE-1) >> PAGE_CACHE_SHIFT;
 	offset = *ppos & ~PAGE_CACHE_MASK;
-
+    t1 = ktime_get_boottime();
 	for (;;) {
 		struct page *page;
 		pgoff_t end_index;
 		loff_t isize;
 		unsigned long nr, ret;
 
+        t2 = ktime_get_boottime();
 		cond_resched();
+        t3 = ktime_get_boottime();
+        t_resched += ktime_to_ns(ktime_sub(t3, t2));
+        
 find_page:
 		if (fatal_signal_pending(current)) {
 			error = -EINTR;
 			goto out;
 		}
-
+        t4 = ktime_get_boottime();
 		page = find_get_page(mapping, index);
+        t5 = ktime_get_boottime();
+        t_find_page += ktime_to_ns(ktime_sub(t5, t4));
 		if (!page) {
 			page_cache_sync_readahead(mapping,
 					ra, filp,
 					index, last_index - index);
+            t6 = ktime_get_boottime();
+            t_sync_readahead += ktime_to_ns(ktime_sub(t6, t5));
 			page = find_get_page(mapping, index);
+            t7 = ktime_get_boottime();
+            t_find_page += ktime_to_ns(ktime_sub(t7, t6));
 			if (unlikely(page == NULL))
 				goto no_cached_page;
 		}
 		if (PageReadahead(page)) {
+            t8 = ktime_get_boottime();
 			page_cache_async_readahead(mapping,
 					ra, filp, page,
 					index, last_index - index);
+            t9 = ktime_get_boottime();
+            t_async_readahead += ktime_to_ns(ktime_sub(t9, t8));
 		}
 		if (!PageUptodate(page)) {
 			/*
@@ -1586,7 +1610,10 @@ find_page:
 			 * wait_on_page_locked is used to avoid unnecessarily
 			 * serialisations and why it's safe.
 			 */
+            t10 = ktime_get_boottime();
 			wait_on_page_locked_killable(page);
+            t11 = ktime_get_boottime();
+            t_wait_on_page += ktime_to_ns(ktime_sub(t11, t10));
 			if (PageUptodate(page))
 				goto page_ok;
 
@@ -1612,8 +1639,10 @@ page_ok:
 		 * part of the page is not copied back to userspace (unless
 		 * another truncate extends the file - this is desired though).
 		 */
-
+        t12 = ktime_get_boottime();
 		isize = i_size_read(inode);
+        t13 = ktime_get_boottime();
+        t_inode += ktime_to_ns(ktime_sub(t13, t12));
 		end_index = (isize - 1) >> PAGE_CACHE_SHIFT;
 		if (unlikely(!isize || index > end_index)) {
 			page_cache_release(page);
@@ -1650,8 +1679,10 @@ page_ok:
 		 * Ok, we have the page, and it's up-to-date, so
 		 * now we can copy it to user space...
 		 */
-
+        t14 = ktime_get_boottime();
 		ret = copy_page_to_iter(page, offset, nr, iter);
+        t15 = ktime_get_boottime();
+        t_copy_page += ktime_to_ns(ktime_sub(t15, t14));
 		offset += ret;
 		index += offset >> PAGE_CACHE_SHIFT;
 		offset &= ~PAGE_CACHE_MASK;
@@ -1695,7 +1726,10 @@ readpage:
 		 */
 		ClearPageError(page);
 		/* Start the actual read. The read will unlock the page. */
+        t17 = ktime_get_boottime();
 		error = mapping->a_ops->readpage(filp, page);
+        t18 = ktime_get_boottime();
+        t_read_page += ktime_to_ns(ktime_sub(t18, t17));
 
 		if (unlikely(error)) {
 			if (error == AOP_TRUNCATED_PAGE) {
@@ -1739,13 +1773,19 @@ no_cached_page:
 		 * Ok, it wasn't cached, so we need to create a new
 		 * page..
 		 */
+        t19 = ktime_get_boottime();
 		page = page_cache_alloc_cold(mapping);
+        t20 = ktime_get_boottime();
+        t_alloc_cold += ktime_to_ns(ktime_sub(t20, t19));
 		if (!page) {
 			error = -ENOMEM;
 			goto out;
 		}
+        t21 = ktime_get_boottime();
 		error = add_to_page_cache_lru(page, mapping, index,
 				mapping_gfp_constraint(mapping, GFP_KERNEL));
+        t22 = ktime_get_boottime();
+        t_add_page += ktime_to_ns(ktime_sub(t22, t21));
 		if (error) {
 			page_cache_release(page);
 			if (error == -EEXIST) {
@@ -1764,6 +1804,26 @@ out:
 
 	*ppos = ((loff_t)index << PAGE_CACHE_SHIFT) + offset;
 	file_accessed(filp);
+    t23 = ktime_get_boottime();
+    t_loop += ktime_to_ns(ktime_sub(t23, t1));
+
+    if (fs_read_stats_switch && filp->f_op->llseek && 
+        filp->f_op->llseek== ext4_llseek && filp->f_inode &&
+        ((struct ext4_sb_info*)(filp->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+        int cpu = fs_read_stats_lock();
+        __fs_read_stats_add(cpu, mystats, time_file_read_resched, t_resched);
+        __fs_read_stats_add(cpu, mystats, time_file_read_find_page, t_find_page);
+        __fs_read_stats_add(cpu, mystats, time_file_read_sync_readahead, t_sync_readahead);
+        __fs_read_stats_add(cpu, mystats, time_file_read_async_readahead, t_async_readahead);
+        __fs_read_stats_add(cpu, mystats, time_file_read_wait_on_page, t_wait_on_page);
+        __fs_read_stats_add(cpu, mystats, time_file_read_inode, t_inode);
+        __fs_read_stats_add(cpu, mystats, time_file_read_copy_page, t_copy_page);
+        __fs_read_stats_add(cpu, mystats, time_file_read_read_page, t_read_page);
+        __fs_read_stats_add(cpu, mystats, time_file_read_alloc_cold, t_alloc_cold);
+        __fs_read_stats_add(cpu, mystats, time_file_read_add_page, t_add_page);
+        __fs_read_stats_add(cpu, mystats, time_file_read_loop, t_loop);
+        fs_read_stats_unlock();
+    }
 	return written ? written : error;
 }
 
