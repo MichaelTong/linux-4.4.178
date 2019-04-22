@@ -4,6 +4,9 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 #include <net/checksum.h>
+#include <linux/ktime.h>
+#include <linux/kernel_stat.h>
+extern struct fs_read_stats __percpu *mystats;
 
 #define iterate_iovec(i, n, __v, __p, skip, STEP) {	\
 	size_t left;					\
@@ -142,6 +145,10 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 	const struct iovec *iov;
 	char __user *buf;
 	void *kaddr, *from;
+    int miket_fault_in_ret = 0;
+    ktime_t t1, t2, t3, t4, t5, t6, t7, t8, t9, t10;
+    s64 t_fault_in = 0, t_kmap_a = 0, t_copy_a = 0, t_kunmap_a = 0, 
+        t_kmap = 0, t_copy = 0, t_kunmap = 0;
 
 	if (unlikely(bytes > i->count))
 		bytes = i->count;
@@ -154,9 +161,14 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 	skip = i->iov_offset;
 	buf = iov->iov_base + skip;
 	copy = min(bytes, iov->iov_len - skip);
-
-	if (!fault_in_pages_writeable(buf, copy)) {
+    t1 = ktime_get_boottime();
+    miket_fault_in_ret = fault_in_pages_writeable(buf, copy);
+    t2 = ktime_get_boottime();
+    t_fault_in += ktime_to_ns(ktime_sub(t2, t1));
+	if (!miket_fault_in_ret) {
 		kaddr = kmap_atomic(page);
+        t3 = ktime_get_boottime();
+        t_kmap_a += ktime_to_ns(ktime_sub(t3, t2));
 		from = kaddr + offset;
 
 		/* first chunk, usually the only one */
@@ -176,17 +188,26 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 			from += copy;
 			bytes -= copy;
 		}
+        t4 = ktime_get_boottime();
+        t_copy_a += ktime_to_ns(ktime_sub(t4, t3));
 		if (likely(!bytes)) {
 			kunmap_atomic(kaddr);
+            t5 = ktime_get_boottime();
+            t_kunmap_a += ktime_to_ns(ktime_sub(t5, t4));
 			goto done;
 		}
 		offset = from - kaddr;
 		buf += copy;
 		kunmap_atomic(kaddr);
+        t6 = ktime_get_boottime();
+        t_kunmap_a += ktime_to_ns(ktime_sub(t6, t4));
 		copy = min(bytes, iov->iov_len - skip);
 	}
 	/* Too bad - revert to non-atomic kmap */
+    t7 = ktime_get_boottime();
 	kaddr = kmap(page);
+    t8 = ktime_get_boottime();
+    t_kmap += ktime_to_ns(ktime_sub(t8, t7));
 	from = kaddr + offset;
 	left = __copy_to_user(buf, from, copy);
 	copy -= left;
@@ -203,7 +224,11 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 		from += copy;
 		bytes -= copy;
 	}
+    t9 = ktime_get_boottime();
+    t_copy += ktime_to_ns(ktime_sub(t9, t8));
 	kunmap(page);
+    t10 = ktime_get_boottime();
+    t_kunmap += ktime_to_ns(ktime_sub(t10, t9));
 done:
 	if (skip == iov->iov_len) {
 		iov++;
@@ -213,6 +238,19 @@ done:
 	i->nr_segs -= iov - i->iov;
 	i->iov = iov;
 	i->iov_offset = skip;
+
+    if (i->miket_inspect_flag) {
+        int cpu = fs_read_stats_lock();
+        __fs_read_stats_add(cpu, mystats, time_copy_fault_in, t_fault_in);
+        __fs_read_stats_add(cpu, mystats, time_copy_kmap_a, t_kmap_a);
+        __fs_read_stats_add(cpu, mystats, time_copy_copy_a, t_copy_a);
+        __fs_read_stats_add(cpu, mystats, time_copy_kunmap_a, t_kunmap_a);
+        __fs_read_stats_add(cpu, mystats, time_copy_kmap, t_kmap);
+        __fs_read_stats_add(cpu, mystats, time_copy_copy, t_copy);
+        __fs_read_stats_add(cpu, mystats, time_copy_kunmap, t_kunmap);
+        fs_read_stats_unlock();
+    }
+
 	return wanted - bytes;
 }
 
@@ -336,6 +374,7 @@ void iov_iter_init(struct iov_iter *i, int direction,
 		i->type = direction;
 		i->iov = iov;
 	}
+    i->miket_inspect_flag = 0;
 	i->nr_segs = nr_segs;
 	i->iov_offset = 0;
 	i->count = count;

@@ -82,13 +82,10 @@ static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
     struct super_block *sb = sbi->s_buddy_cache->i_sb;
 
     return snprintf(buf, PAGE_SIZE, 
-        "pread_fdget: %lld\n"
-        "pread_vfs_read: %lld\n"
-        "pread_fdput: %lld\n"
+        "vfs_read_count: %lld\n"
         "vfs_read_verify: %lld\n"
         "vfs_read__vfs_read: %lld\n"
         "vfs_read_post: %lld\n"
-        "vfs_read_count: %lld\n"
         "sync_read_pre: %lld\n"
         "sync_read_read_iter: %lld\n"
         "file_read_resched: %lld\n"
@@ -101,14 +98,19 @@ static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
         "file_read_read_page: %lld\n"
         "file_read_alloc_cold: %lld\n"
         "file_read_add_page: %lld\n"
-        "file_read_loop: %lld\n",
-        fs_read_stats_read(mystats, time_pread_fdget),
-        fs_read_stats_read(mystats, time_pread_vfs_read),
-        fs_read_stats_read(mystats, time_pread_fdput),
+        "file_read_loop: %lld\n"
+        "\n"
+        "copy_fault_in: %lld\n"
+        "copy_kmap_a: %lld\n"
+        "copy_copy_a: %lld\n"
+        "copy_kunmap_a: %lld\n"
+        "copy_kmap: %lld\n"
+        "copy_copy: %lld\n"
+        "copy_kunmap: %lld\n",
+        fs_read_stats_read(mystats, cnt_vfs_read),
         fs_read_stats_read(mystats, time_vfs_read_verify),
         fs_read_stats_read(mystats, time_vfs_read__vfs_read),
         fs_read_stats_read(mystats, time_vfs_read_post),
-        fs_read_stats_read(mystats, cnt_vfs_read),
         fs_read_stats_read(mystats, time_sync_read_pre),
         fs_read_stats_read(mystats, time_sync_read_read_iter),
         fs_read_stats_read(mystats, time_file_read_resched),
@@ -121,7 +123,14 @@ static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
         fs_read_stats_read(mystats, time_file_read_read_page),
         fs_read_stats_read(mystats, time_file_read_alloc_cold),
         fs_read_stats_read(mystats, time_file_read_add_page),
-        fs_read_stats_read(mystats, time_file_read_loop));
+        fs_read_stats_read(mystats, time_file_read_loop),
+        fs_read_stats_read(mystats, time_copy_fault_in),
+        fs_read_stats_read(mystats, time_copy_kmap_a),
+        fs_read_stats_read(mystats, time_copy_copy_a),
+        fs_read_stats_read(mystats, time_copy_kunmap_a),
+        fs_read_stats_read(mystats, time_copy_kmap),
+        fs_read_stats_read(mystats, time_copy_copy),
+        fs_read_stats_read(mystats, time_copy_kunmap));
 }
 
 static ssize_t inode_readahead_blks_store(struct ext4_attr *a,

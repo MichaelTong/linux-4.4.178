@@ -27,6 +27,7 @@ enum {
 
 struct iov_iter {
 	int type;
+    int miket_inspect_flag;
 	size_t iov_offset;
 	size_t count;
 	union {

@@ -635,32 +635,17 @@ SYSCALL_DEFINE4(pread64, unsigned int, fd, char __user *, buf,
 {
 	struct fd f;
 	ssize_t ret = -EBADF;
-    ktime_t t1, t2, t3, t4;
 
 	if (pos < 0)
 		return -EINVAL;
-    t1 = ktime_get_boottime();
 	f = fdget(fd);
-    t2 = ktime_get_boottime();
 
 	if (f.file) {
 		ret = -ESPIPE;
 		if (f.file->f_mode & FMODE_PREAD) 
 			ret = vfs_read(f.file, buf, count, &pos);
-        t3 = ktime_get_boottime();
 		fdput(f);
-        t4 = ktime_get_boottime();
 	}
-    if (fs_read_stats_switch && f.file->f_op->llseek && 
-        f.file->f_op->llseek== ext4_llseek && f.file->f_inode &&
-        ((struct ext4_sb_info*)(f.file->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
-        int cpu = fs_read_stats_lock();
-        __fs_read_stats_add(cpu, mystats, time_pread_fdget, ktime_to_ns(ktime_sub(t2, t1)));
-        __fs_read_stats_add(cpu, mystats, time_pread_vfs_read, ktime_to_ns(ktime_sub(t3, t2)));
-        __fs_read_stats_add(cpu, mystats, time_pread_fdput, ktime_to_ns(ktime_sub(t4, t3)));
-        fs_read_stats_unlock();
-    }
-
 	return ret;
 }
 

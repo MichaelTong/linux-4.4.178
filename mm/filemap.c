@@ -1554,9 +1554,16 @@ static ssize_t do_generic_file_read(struct file *filp, loff_t *ppos,
 	int error = 0;
     ktime_t t1, t2, t3, t4, t5, t6, t7, t8, t9, t10, t11, t12, t13, t14, t15,
             t17, t18, t19, t20, t21, t22, t23;
+    int to_inspect = 0;
     s64 t_resched = 0, t_find_page = 0, t_sync_readahead = 0, 
         t_async_readahead = 0, t_wait_on_page = 0, t_inode = 0, t_copy_page = 0,
         t_read_page = 0, t_alloc_cold = 0, t_add_page = 0, t_loop = 0;
+
+    if (fs_read_stats_switch && filp->f_op->llseek && 
+            filp->f_op->llseek== ext4_llseek && filp->f_inode &&
+            ((struct ext4_sb_info*)(filp->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+        to_inspect = 1;
+    }
 
 	index = *ppos >> PAGE_CACHE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_CACHE_SHIFT;
@@ -1679,6 +1686,7 @@ page_ok:
 		 * Ok, we have the page, and it's up-to-date, so
 		 * now we can copy it to user space...
 		 */
+        if (to_inspect) iter->miket_inspect_flag = 1;
         t14 = ktime_get_boottime();
 		ret = copy_page_to_iter(page, offset, nr, iter);
         t15 = ktime_get_boottime();
@@ -1807,9 +1815,7 @@ out:
     t23 = ktime_get_boottime();
     t_loop += ktime_to_ns(ktime_sub(t23, t1));
 
-    if (fs_read_stats_switch && filp->f_op->llseek && 
-        filp->f_op->llseek== ext4_llseek && filp->f_inode &&
-        ((struct ext4_sb_info*)(filp->f_inode->i_sb->s_fs_info))->fs_read_stats_switch) {
+    if (to_inspect) {
         int cpu = fs_read_stats_lock();
         __fs_read_stats_add(cpu, mystats, time_file_read_resched, t_resched);
         __fs_read_stats_add(cpu, mystats, time_file_read_find_page, t_find_page);

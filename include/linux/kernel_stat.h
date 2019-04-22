@@ -96,17 +96,12 @@ extern void account_steal_ticks(unsigned long ticks);
 extern void account_idle_ticks(unsigned long ticks);
 
 struct fs_read_stats {
-    s64 time_pread_fdget;
-    s64 time_pread_vfs_read;
-    s64 time_pread_fdput;
-
     s64 time_vfs_read_verify;
     s64 time_vfs_read__vfs_read;
-    s64 junk;
     s64 time_vfs_read_post;
     s64 cnt_vfs_read;
-
     s64 time_sync_read_pre;
+    s64 junk;
     s64 time_sync_read_read_iter;
     
     s64 time_file_read_resched;
@@ -120,6 +115,14 @@ struct fs_read_stats {
     s64 time_file_read_alloc_cold;
     s64 time_file_read_add_page;
     s64 time_file_read_loop;
+
+    s64 time_copy_fault_in;
+    s64 time_copy_kmap_a;
+    s64 time_copy_copy_a;
+    s64 time_copy_kunmap_a;
+    s64 time_copy_kmap;
+    s64 time_copy_copy;
+    s64 time_copy_kunmap;
 };
 
 #ifdef CONFIG_SMP
