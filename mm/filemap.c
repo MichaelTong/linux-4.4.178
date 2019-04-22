@@ -1598,9 +1598,9 @@ find_page:
 		}
 		if (PageReadahead(page)) {
             t8 = ktime_get_boottime();
-			page_cache_async_readahead(mapping,
-					ra, filp, page,
-					index, last_index - index);
+			// page_cache_async_readahead(mapping,
+			// 		ra, filp, page,
+			// 		index, last_index - index);
             t9 = ktime_get_boottime();
             t_async_readahead += ktime_to_ns(ktime_sub(t9, t8));
 		}
