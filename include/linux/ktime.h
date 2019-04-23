@@ -303,4 +303,36 @@ static inline ktime_t ms_to_ktime(u64 ms)
 
 # include <linux/timekeeping.h>
 
+struct fs_read_stats {
+    s64 time_vfs_read_verify;
+    s64 time_vfs_read__vfs_read;
+    s64 time_vfs_read_post;
+    s64 cnt_vfs_read;
+    s64 time_sync_read_pre;
+    s64 junk;
+    s64 time_sync_read_read_iter;
+    
+    s64 time_file_read_resched;
+    s64 time_file_read_find_page;
+    s64 time_file_read_sync_readahead;
+    s64 time_file_read_async_readahead;
+    s64 time_file_read_wait_on_page;
+    s64 time_file_read_inode;
+    s64 time_file_read_copy_page;
+    s64 time_file_read_read_page;
+    s64 time_file_read_alloc_cold;
+    s64 time_file_read_add_page;
+    s64 time_file_read_loop;
+
+    s64 time_copy_fault_in;
+    s64 time_copy_kmap_a;
+    s64 time_copy_copy_a;
+    s64 time_copy_kunmap_a;
+    s64 time_copy_kmap;
+    s64 time_copy_copy;
+    s64 time_copy_kunmap;
+
+    s64 time_touser_generic;
+    s64 time_tosuer_asm;
+};
 #endif

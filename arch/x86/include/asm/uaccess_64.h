@@ -10,7 +10,18 @@
 #include <asm/alternative.h>
 #include <asm/cpufeatures.h>
 #include <asm/page.h>
+#include <linux/ktime.h>
+#include <linux/smp.h>
+#include <linux/rcupdate.h>
 
+extern struct fs_read_stats __percpu *mystats;
+
+#define fs_read_stats_lock()    ({ rcu_read_lock(); get_cpu(); })
+
+#define fs_read_stats_unlock()  do {put_cpu(); rcu_read_unlock(); } while (0)
+
+#define __fs_read_stats_add(cpu, cpu_stat, field, addnd) \
+    (per_cpu_ptr(cpu_stat, (cpu))->field += (addnd))
 /*
  * Copy To/From Userspace
  */
@@ -172,6 +183,127 @@ int __copy_to_user_nocheck(void __user *dst, const void *src, unsigned size)
 }
 
 static __always_inline __must_check
+int __copy_to_user_nocheck_miket(void __user *dst, const void *src, unsigned size, int t)
+{
+	int ret = 0;
+    ktime_t t1, t2;
+    s64 lat;
+    int cpu;
+    t1 = ktime_get_boottime();
+	if (!__builtin_constant_p(size)) {
+        ret = copy_user_generic((__force void *)dst, src, size);
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_touser_generic, lat);
+            fs_read_stats_unlock();
+        }
+        return ret;
+    }
+	switch (size) {
+	case 1:
+		__uaccess_begin();
+		__put_user_asm(*(u8 *)src, (u8 __user *)dst,
+			      ret, "b", "b", "iq", 1);
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	case 2:
+		__uaccess_begin();
+		__put_user_asm(*(u16 *)src, (u16 __user *)dst,
+			      ret, "w", "w", "ir", 2);
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	case 4:
+		__uaccess_begin();
+		__put_user_asm(*(u32 *)src, (u32 __user *)dst,
+			      ret, "l", "k", "ir", 4);
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	case 8:
+		__uaccess_begin();
+		__put_user_asm(*(u64 *)src, (u64 __user *)dst,
+			      ret, "q", "", "er", 8);
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	case 10:
+		__uaccess_begin();
+		__put_user_asm(*(u64 *)src, (u64 __user *)dst,
+			       ret, "q", "", "er", 10);
+		if (likely(!ret)) {
+			asm("":::"memory");
+			__put_user_asm(4[(u16 *)src], 4 + (u16 __user *)dst,
+				       ret, "w", "w", "ir", 2);
+		}
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	case 16:
+		__uaccess_begin();
+		__put_user_asm(*(u64 *)src, (u64 __user *)dst,
+			       ret, "q", "", "er", 16);
+		if (likely(!ret)) {
+			asm("":::"memory");
+			__put_user_asm(1[(u64 *)src], 1 + (u64 __user *)dst,
+				       ret, "q", "", "er", 8);
+		}
+		__uaccess_end();
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_tosuer_asm, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	default:
+        ret = copy_user_generic((__force void *)dst, src, size);
+        t2 = ktime_get_boottime();
+        if (t == 1) {
+            lat = ktime_to_ns(ktime_sub(t2, t1));
+            cpu = fs_read_stats_lock();
+            __fs_read_stats_add(cpu, mystats, time_touser_generic, lat);
+            fs_read_stats_unlock();
+        }
+		return ret;
+	}
+}
+
+static __always_inline __must_check
 int __copy_to_user(void __user *dst, const void *src, unsigned size)
 {
 	might_fault();
@@ -249,6 +381,12 @@ static __must_check __always_inline int
 __copy_to_user_inatomic(void __user *dst, const void *src, unsigned size)
 {
 	return __copy_to_user_nocheck(dst, src, size);
+}
+
+static __must_check __always_inline int
+__copy_to_user_inatomic_miket(void __user *dst, const void *src, unsigned size, int t)
+{
+	return __copy_to_user_nocheck_miket(dst, src, size, t);
 }
 
 extern long __copy_user_nocache(void *dst, const void __user *src,

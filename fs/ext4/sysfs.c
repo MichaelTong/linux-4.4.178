@@ -106,7 +106,10 @@ static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
         "copy_kunmap_a: %lld\n"
         "copy_kmap: %lld\n"
         "copy_copy: %lld\n"
-        "copy_kunmap: %lld\n",
+        "copy_kunmap: %lld\n"
+        "\n"
+        "touser_generic: %lld\n"
+        "touser_asm: %lld\n",
         fs_read_stats_read(mystats, cnt_vfs_read),
         fs_read_stats_read(mystats, time_vfs_read_verify),
         fs_read_stats_read(mystats, time_vfs_read__vfs_read),
@@ -130,7 +133,9 @@ static ssize_t miket_fs_read_stats_show(struct ext4_attr *a,
         fs_read_stats_read(mystats, time_copy_kunmap_a),
         fs_read_stats_read(mystats, time_copy_kmap),
         fs_read_stats_read(mystats, time_copy_copy),
-        fs_read_stats_read(mystats, time_copy_kunmap));
+        fs_read_stats_read(mystats, time_copy_kunmap),
+        fs_read_stats_read(mystats, time_touser_generic),
+        fs_read_stats_read(mystats, time_tosuer_asm));
 }
 
 static ssize_t inode_readahead_blks_store(struct ext4_attr *a,

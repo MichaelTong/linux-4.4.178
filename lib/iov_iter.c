@@ -172,7 +172,7 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 		from = kaddr + offset;
 
 		/* first chunk, usually the only one */
-		left = __copy_to_user_inatomic(buf, from, copy);
+		left = __copy_to_user_inatomic_miket(buf, from, copy, i->miket_inspect_flag);
 		copy -= left;
 		skip += copy;
 		from += copy;
@@ -182,7 +182,7 @@ static size_t copy_page_to_iter_iovec(struct page *page, size_t offset, size_t b
 			iov++;
 			buf = iov->iov_base;
 			copy = min(bytes, iov->iov_len);
-			left = __copy_to_user_inatomic(buf, from, copy);
+			left = __copy_to_user_inatomic_miket(buf, from, copy, i->miket_inspect_flag);
 			copy -= left;
 			skip = copy;
 			from += copy;
