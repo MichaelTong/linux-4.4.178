@@ -96,17 +96,13 @@ extern void account_steal_ticks(unsigned long ticks);
 extern void account_idle_ticks(unsigned long ticks);
 
 struct fs_read_stats {
-    s64 time_pread_fdget;
-    s64 time_pread_vfs_read;
-    s64 time_pread_fdput;
-
     s64 time_vfs_read_verify;
     s64 time_vfs_read__vfs_read;
-    s64 junk;
     s64 time_vfs_read_post;
     s64 cnt_vfs_read;
 
     s64 time_sync_read_pre;
+    s64 junk;
     s64 time_sync_read_read_iter;
     
     s64 time_file_read_resched;
